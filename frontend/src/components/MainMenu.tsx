@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useGameStore } from '../store/gameStore';
 import { RoomManager } from '../multiplayer/RoomManager';
+import { RoomSync } from '../lib/roomSync';
 import { supabase } from '../lib/supabase';
 import '../MainMenu.css';
 
@@ -101,6 +102,9 @@ const MainMenu: React.FC = () => {
         finishTime: null,
       });
 
+      // Save room to localStorage for cross-tab sync
+      RoomSync.saveRoom(mockRoom);
+
       setScreen('lobby');
     } catch (error) {
       console.error('Failed to create room:', error);
@@ -156,6 +160,9 @@ const MainMenu: React.FC = () => {
         finishTime: null,
       });
 
+      // Save room to localStorage for cross-tab sync
+      RoomSync.saveRoom(mockRoom);
+
       setScreen('lobby');
     } catch (error) {
       console.error('Failed to start quick play:', error);
@@ -182,23 +189,37 @@ const MainMenu: React.FC = () => {
     try {
       const playerId = `player_${Date.now()}`;
       
-      // Create mock room join for testing
-      const mockRoom = {
-        id: `room_${roomCode}`,
-        code: roomCode.toUpperCase(),
-        hostId: `host_${roomCode}`,
-        levelId: 1,
-        status: 'LOBBY' as const,
-        maxPlayers: 12,
+      // Try to get existing room from localStorage (if it exists in another tab)
+      let mockRoom = RoomSync.getRoom();
+
+      if (!mockRoom || mockRoom.code !== roomCode.toUpperCase()) {
+        // Room doesn't exist or wrong code - create mock join
+        mockRoom = {
+          id: `room_${roomCode}`,
+          code: roomCode.toUpperCase(),
+          hostId: `host_${roomCode}`,
+          levelId: 1,
+          status: 'LOBBY' as const,
+          maxPlayers: 12,
+          players: [
+            {
+              id: `host_${roomCode}`,
+              name: 'Host',
+              color: '#667eea',
+              status: 'joined' as const,
+              isReady: false,
+              finishTime: null,
+            },
+          ],
+          createdAt: new Date().toISOString(),
+        };
+      }
+
+      // Add this player to the room
+      mockRoom = {
+        ...mockRoom,
         players: [
-          {
-            id: `host_${roomCode}`,
-            name: 'Host',
-            color: '#667eea',
-            status: 'joined' as const,
-            isReady: false,
-            finishTime: null,
-          },
+          ...mockRoom.players.filter(p => p.id !== playerId), // Remove if duplicate
           {
             id: playerId,
             name: playerName,
@@ -208,7 +229,6 @@ const MainMenu: React.FC = () => {
             finishTime: null,
           },
         ],
-        createdAt: new Date().toISOString(),
       };
 
       setPlayerName(playerName);
@@ -223,6 +243,9 @@ const MainMenu: React.FC = () => {
         isReady: false,
         finishTime: null,
       });
+
+      // Save room to localStorage for cross-tab sync
+      RoomSync.saveRoom(mockRoom);
 
       setShowJoinModal(false);
       setScreen('lobby');
