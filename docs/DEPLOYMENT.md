@@ -95,7 +95,7 @@ git commit -m "Initial LOLBEANS commit"
 
 # Create repo on GitHub, then:
 git branch -M main
-git remote add origin https://github.com/YOUR_USERNAME/lolbeans.git
+git remote add origin https://github.com/devx3939-sys/lolbeans.git
 git push -u origin main
 ```
 
