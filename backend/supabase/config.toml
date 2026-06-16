@@ -1,0 +1,11 @@
+name = "lolbeans-supabase"
+
+[build]
+
+[env.production]
+supabase_url = "https://your-project.supabase.co"
+supabase_key = "your-anon-key"
+
+[env.development]
+supabase_url = "http://localhost:54321"
+supabase_key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
