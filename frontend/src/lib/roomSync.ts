@@ -1,29 +1,63 @@
 /**
- * Room state synchronization using localStorage
- * Allows multiple browser tabs to sync lobby state for local testing
+ * Room state synchronization using BroadcastChannel and localStorage
+ * Allows multiple browser tabs to sync lobby state in real-time
  */
 
 import { Room } from '../types/index';
 
 const ROOM_STORAGE_KEY = 'lolbeans_current_room';
-const ROOM_LIST_KEY = 'lolbeans_rooms_list';
+const CHANNEL_NAME = 'lolbeans_room_sync';
+
+// Global listener registry
+const listeners = new Set<(room: Room | null) => void>();
+let broadcastChannel: BroadcastChannel | null = null;
+
+// Initialize BroadcastChannel if supported
+function initBroadcastChannel() {
+  if (typeof BroadcastChannel !== 'undefined' && !broadcastChannel) {
+    try {
+      broadcastChannel = new BroadcastChannel(CHANNEL_NAME);
+      broadcastChannel.onmessage = (event) => {
+        if (event.data.type === 'ROOM_UPDATE') {
+          notifyListeners(event.data.room);
+        }
+      };
+    } catch (error) {
+      console.warn('BroadcastChannel not available:', error);
+      broadcastChannel = null;
+    }
+  }
+}
+
+function notifyListeners(room: Room | null) {
+  listeners.forEach(callback => {
+    try {
+      callback(room);
+    } catch (error) {
+      console.error('Error in room update callback:', error);
+    }
+  });
+}
 
 export class RoomSync {
   /**
-   * Save room to localStorage and broadcast to other tabs
+   * Save room to localStorage and broadcast to all tabs
    */
   static saveRoom(room: Room): void {
     try {
       localStorage.setItem(ROOM_STORAGE_KEY, JSON.stringify(room));
-      // Broadcast event to other tabs
-      window.dispatchEvent(
-        new StorageEvent('storage', {
-          key: ROOM_STORAGE_KEY,
-          newValue: JSON.stringify(room),
-          oldValue: null,
-          storageArea: localStorage,
-        })
-      );
+      
+      // Notify local listeners immediately
+      notifyListeners(room);
+      
+      // Broadcast to other tabs via BroadcastChannel
+      initBroadcastChannel();
+      if (broadcastChannel) {
+        broadcastChannel.postMessage({
+          type: 'ROOM_UPDATE',
+          room: room,
+        });
+      }
     } catch (error) {
       console.error('Failed to save room:', error);
     }
@@ -48,37 +82,53 @@ export class RoomSync {
   static clearRoom(): void {
     try {
       localStorage.removeItem(ROOM_STORAGE_KEY);
+      notifyListeners(null);
+      
+      // Broadcast to other tabs
+      initBroadcastChannel();
+      if (broadcastChannel) {
+        broadcastChannel.postMessage({
+          type: 'ROOM_UPDATE',
+          room: null,
+        });
+      }
     } catch (error) {
       console.error('Failed to clear room:', error);
     }
   }
 
   /**
-   * Listen for room updates from other tabs
+   * Listen for room updates from all sources
    */
   static onRoomUpdate(callback: (room: Room | null) => void): () => void {
-    const handleStorageChange = (event: StorageEvent) => {
-      if (event.key === ROOM_STORAGE_KEY) {
-        const room = event.newValue ? JSON.parse(event.newValue) : null;
-        callback(room);
-      }
-    };
+    initBroadcastChannel();
+    
+    // Add listener to registry
+    listeners.add(callback);
 
-    // Also listen for our own dispatched events
-    const handleCustomStorage = (event: Event) => {
-      if (event instanceof StorageEvent && event.key === ROOM_STORAGE_KEY) {
-        const room = event.newValue ? JSON.parse(event.newValue) : null;
-        callback(room);
+    // Setup polling as fallback for same-tab updates
+    let lastRoom = RoomSync.getRoom();
+    let lastJson = JSON.stringify(lastRoom);
+    
+    const pollInterval = setInterval(() => {
+      try {
+        const currentRoom = RoomSync.getRoom();
+        const currentJson = JSON.stringify(currentRoom);
+        
+        if (currentJson !== lastJson) {
+          lastRoom = currentRoom;
+          lastJson = currentJson;
+          notifyListeners(currentRoom);
+        }
+      } catch (error) {
+        console.error('Polling error:', error);
       }
-    };
-
-    window.addEventListener('storage', handleStorageChange);
-    window.addEventListener('storage', handleCustomStorage);
+    }, 200); // Poll every 200ms for responsiveness
 
     // Cleanup function
     return () => {
-      window.removeEventListener('storage', handleStorageChange);
-      window.removeEventListener('storage', handleCustomStorage);
+      listeners.delete(callback);
+      clearInterval(pollInterval);
     };
   }
 

@@ -12,9 +12,17 @@ const LobbyScreen: React.FC = () => {
   const [countdown, setCountdown] = useState(10);
   const [displayRoom, setDisplayRoom] = useState<Room | null>(currentRoom);
 
-  // Listen for room updates from other tabs
+  // Listen for room updates from other tabs and polling
   useEffect(() => {
+    // Get current room from storage first
+    const storedRoom = RoomSync.getRoom();
+    if (storedRoom) {
+      setDisplayRoom(storedRoom);
+      setCurrentRoom(storedRoom);
+    }
+
     const unsubscribe = RoomSync.onRoomUpdate((room) => {
+      console.log('Room updated:', room?.players.length, 'players');
       if (room) {
         setDisplayRoom(room);
         setCurrentRoom(room);
@@ -24,13 +32,7 @@ const LobbyScreen: React.FC = () => {
     return unsubscribe;
   }, [setCurrentRoom]);
 
-  // Update display room when currentRoom changes
-  useEffect(() => {
-    if (currentRoom) {
-      setDisplayRoom(currentRoom);
-    }
-  }, [currentRoom]);
-
+  // Countdown effect
   useEffect(() => {
     const interval = setInterval(() => {
       setCountdown((c) => Math.max(0, c - 1));
@@ -48,6 +50,7 @@ const LobbyScreen: React.FC = () => {
 
   const handleReady = () => {
     if (localPlayer) {
+      console.log('Marking player', localPlayer.id, 'as ready:', !localPlayer.isReady);
       const updatedRoom = RoomSync.setPlayerReady(localPlayer.id, !localPlayer.isReady);
       if (updatedRoom) {
         setDisplayRoom(updatedRoom);
