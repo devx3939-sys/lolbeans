@@ -56,6 +56,14 @@ const LobbyScreen: React.FC = () => {
         setDisplayRoom(updatedRoom);
         setCurrentRoom(updatedRoom);
         updatePlayerReady(localPlayer.id, !localPlayer.isReady);
+
+        // If host marks themselves ready, auto-start game after 2 seconds
+        if (localPlayer.id === updatedRoom.hostId && !localPlayer.isReady) {
+          setTimeout(() => {
+            console.log('Host ready - starting game!');
+            setScreen('game');
+          }, 2000);
+        }
       }
     }
   };
@@ -112,7 +120,9 @@ const LobbyScreen: React.FC = () => {
         </div>
 
         <div className="waiting-message">
-          {allReady ? '🎮 All players ready! Starting soon...' : '⏳ Waiting for players to join and ready up...'}
+          {localPlayer?.id === displayRoom.hostId && localPlayer.isReady 
+            ? '🎮 You are ready! Game starting in 2 seconds...' 
+            : '⏳ Waiting for players...'}
         </div>
       </div>
     </div>
